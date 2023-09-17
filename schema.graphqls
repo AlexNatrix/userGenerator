@@ -1,0 +1,25 @@
+# GraphQL schema
+
+type Query {
+  users: [User]
+}
+
+type Mutation {
+  addUser(input: NewUser!): ID
+  deleteUser(id: ID!): ID
+  updateUser(id: ID!): ID
+}
+
+input NewUser {
+  Name: String
+  Surname: String
+}
+
+type User {
+  Name: String! @search(by: [exact])
+  Surname: String! @search(by: [exact])
+  Patronymic: String @search(by: [exact])
+  Age: Int! @search
+  Sex: String! @search(by: [exact])
+  Nationality: String! @search(by: [exact])
+}
