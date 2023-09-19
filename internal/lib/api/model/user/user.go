@@ -7,9 +7,24 @@ type User struct {
 	*Enrichment
 }
 
+func New() User {
+	return User{
+		&BaseUser{
+			Name:       "",
+			Surname:    "",
+			Patronymic: "",
+		},
+		&Enrichment{
+			Age:         0,
+			Sex:         "",
+			Nationality: "",
+		},
+	}
+}
+
 func (u User) String() string {
 	return fmt.Sprintf("{ name:%s, surname:%s, sex:%s, age:%d, nationality:%s }",
-	u.Name,u.Surname,u.Sex,u.Age,u.Nationality)
+		u.Name, u.Surname, u.Sex, u.Age, u.Nationality)
 }
 
 type Enrichment struct {
@@ -19,9 +34,9 @@ type Enrichment struct {
 }
 
 type BaseUser struct {
-	Name       string  `json:"name"`
-	Surname    string  `json:"surname"`
-	Patronymic *string `json: "patronymic,omitempty"`
+	Name       string `json:"name"`
+	Surname    string `json:"surname"`
+	Patronymic string `json:"patronymic,omitempty"`
 }
 
 type CountryArray struct {
