@@ -5,6 +5,7 @@ import (
 	"io"
 	"log/slog"
 	"main/internal"
+	models "main/internal/lib/api/model/user"
 	resp "main/internal/lib/api/response"
 	"net/http"
 
@@ -17,11 +18,11 @@ import (
 
 type UpdateRequest struct {
 	Id int64 `json:"id"`
-	*GenUser
+	data *models.User
 }
 
 type UserUpdater interface {
-	UpdateUser(userID int64, user GenUser) error
+	UpdateUser(userID int64, user models.User) error
 }
 
 
@@ -68,7 +69,7 @@ func New(log *slog.Logger, userUpdater UserUpdater) http.HandlerFunc {
 		}
 
 
-		err = userUpdater.UpdateUser(req.Id ,req.GenUser)
+		err = userUpdater.UpdateUser(req.Id ,req.data)
 		if err != nil {
 			log.Error("failed to update user", internal.Err(err))
 

@@ -11,8 +11,11 @@ import (
 
 type Config struct {
 	Env         string `yaml:"env" env:"ENV" env-required:"true"`
-	StoragePath string `yaml:"storage_path" env-required:"true" `
+	StoragePath string `yaml:"storage_path" env-required:"true"`
 	HTTPServer  `yaml:"http_server"`
+	KafkaCFG `yaml:"kafka_cfg" env-required:"true"`
+	EnrichmentURLS []string `yaml:"enrichment_URLs" env-required:"true"`
+	EnrichmentTimeoutMS string `yaml:"enrichment_timeout_ms" env-default:"1"`
 }
 
 type HTTPServer struct {
@@ -20,6 +23,16 @@ type HTTPServer struct {
 	Timeout     time.Duration `yaml:"timeout" env-default:"4s"`
 	IdleTimeout time.Duration    `yaml:"idle_timeout" env-default:"60s"`
 }
+
+type KafkaCFG struct{
+	KafkaURL string `yaml:"kafka_URL" env-default:"localhost:9093"`
+	KafkaProducerTopic string `yaml:"kafka_producer_topic" env-default:"FIOfailed"`
+	KafkaConsumerTopic string `yaml:"kafka_consumer_topic" env-default:"FIO"`
+	KafkaDelayMS string `yaml:"kafka_delay_ms" env-default:"5"`
+	KafkaConsumerGroup  string  `yaml:"kafka_consumer_groupID" env-default:"0"`
+}
+
+
 
 func LoadConfig() (Config,error){
 	const op = "config.LoadConfig"

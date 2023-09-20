@@ -7,14 +7,15 @@ import (
 	config "main/internal"
 	logger "main/internal"
 	storage "main/internal"
-	"main/internal/kafka/consumer"
+	"main/internal/kafka/pipeline"
+	kafka_test "main/internal/kafka/tests"
 	models "main/internal/lib/api/model/user"
-	"main/internal/lib/enrichment"
 	mwLogger "main/internal/middleware/logger"
 	"math/rand"
-	"net/url"
-	"strings"
-	"time"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 
 	"github.com/brianvoe/gofakeit"
 	"github.com/go-chi/chi/v5"
@@ -37,22 +38,7 @@ func FakeUserGenerator(n int) []models.User {
 	return ret
 }
 
-func FakeBaseUserGenerator(n int) []models.BaseUser {
-	ret := make([]models.BaseUser, n)
-	for i := 0; i < n; i++ {
-		des := rand.Intn(100)
-		u := gofakeit.Person()
-		user := models.BaseUser{
-			Name:    u.FirstName,
-			Surname: u.LastName,
-		}
-		if des < 75 {
-			user.Patronymic = "Sanich"
-		}
-		ret[i] = user
-	}
-	return ret
-}
+
 
 func main() {
 	//config :cleanENV
@@ -63,6 +49,7 @@ func main() {
 	store, err := storage.New(cfg.StoragePath)
 	if err != nil {
 		log.Error("failed to init storage", internal.Err(err))
+		os.Exit(1);
 	} else {
 		log.Info("DB init success")
 	}
@@ -70,8 +57,8 @@ func main() {
 	// for _, v := range a {
 	// 	fmt.Println("user", v)
 	// }
-	//b, err := store.SaveUser(log, a...)
-	//fmt.Println(b, err)
+	// b, err := store.SaveUser(log, a...)
+	// fmt.Println(b, err)
 	_ = store
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)
@@ -79,65 +66,47 @@ func main() {
 	router.Use(mwLogger.New(log))
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
+
 	//router.Get("/user/{name}-{surname}-{patr}-{age}-{sex}-{nationality}")
-	test, err := enrichment.Test()
-	if err != nil {
-		log.Error("failed to enrich", internal.Err(err))
-	} else {
-		fmt.Println(models.User(*test))
-	}
-	// fmt.Println("COnsuming")
-	// consumer.Produce(context.Background())
-	// fmt.Println("COnsuming")
-	// consumer.Consume()
-	var prod func(pinger <-chan int, ponger chan<- int)
-	var cons func(pinger chan<- int, ponger <-chan int)
-	// The pinger prints a ping and waits for a pong
-	prod = func(pinger <-chan int, ponger chan<- int) {
-		for {
-			<-pinger
-			fmt.Println("ping")
-			consumer.Produce(context.Background())
-			time.Sleep(time.Second)
-			ponger <- 1
-		}
-	}
+	// test, err := enrichment.Test()
+	// if err != nil {
+	// 	log.Error("failed to enrich", internal.Err(err))
+	// } else {
+	// 	fmt.Println(models.User(*test))
+	// }
 
-	// The ponger prints a pong and waits for a ping
-	cons = func(pinger chan<- int, ponger <-chan int) {
-		for {
-			<-ponger
-			fmt.Println("pong")
-			for i := 0; i < 10; i++ {
-				consumer.Consume()
-			}
-			time.Sleep(time.Second)
-			pinger <- 1
-		}
-	}
-	k, err := url.Parse("users/?age=lt~50&sex=male&page=1&perpage=20")
-	if err != nil {
-		fmt.Println(err)
-	}
-	for _, v := range k.Query() {
-		for k := range v {
-			fmt.Println(strings.Split(v[k], "~"))
-		}
-	}
-	fmt.Println(store.GetUsers(k.Query()))
-	ping := make(chan int)
-	pong := make(chan int)
+	// k, err := url.Parse("users/?age=lt~50&sex=male&page=1&perpage=20")
+	// if err != nil {
+	// 	fmt.Println(err)
+	// }
+	// for _, v := range k.Query() {
+	// 	for k := range v {
+	// 		fmt.Println(strings.Split(v[k], "~"))
+	// 	}
+	// }
+	// fmt.Println(store.GetUsers(k.Query()))
+	kafka_test.Populate(100, log, cfg)
+	ctx:=context.Background()
+	p:=pipeline.New(&ctx,log,cfg,store)
+	signals := make(chan os.Signal, 1)
 
-	go prod(ping, pong)
-	go cons(ping, pong)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGKILL)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGKILL)
 
-	// The main goroutine starts the ping/pong by sending into the ping channel
-	ping <- 1
-
-	for {
-		// Block the main thread until an interrupt
-		time.Sleep(time.Second)
-	}
+	// go routine for getting signals asynchronously
+	go func() {
+		sig := <-signals
+		log.Info("%s Got signal: %w", "main",sig)
+		os.Exit(1)
+	}()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func(){
+		defer wg.Done()
+		p.Start()
+	}()
+	wg.Wait()
+	
 	// router.Post("/users/",saveuser.New(log,store))
 	// router.Delete("/users/{id}",deleteuser.New(log,store))
 	// router.Patch("/users/{id}",updateuser.New(log,store))
@@ -204,12 +173,4 @@ func main() {
 	// 	os.Exit(1)
 	// }
 	// _=id
-
-	//logger : slog
-
-	//storage : pg
-
-	//router : chi, render
-
-	//run :
 }

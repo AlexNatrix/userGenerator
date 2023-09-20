@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"main/internal"
+	models "main/internal/lib/api/model/user"
 	"net/http"
 
 	"github.com/go-chi/chi/middleware"

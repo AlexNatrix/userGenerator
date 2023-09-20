@@ -5,3 +5,15 @@ http_server:
   address: "localhost:8082"
   timeout: 4s
   idle_timeout: 60s
+kafka_cfg:
+  kafka_URL: "localhost:9093"
+  kafka_producer_topic: "FIOfailed"
+  kafka_consumer_topic: "FIO"
+  kafka_delay_ms: "5"
+  kafka_consumer_groupID: "0"
+enrichment_URLs: [
+  "https://api.genderize.io",
+	"https://api.agify.io",
+	"https://api.nationalize.io"
+]
+enrichment_timeout_ms: "1"

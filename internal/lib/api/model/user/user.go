@@ -39,6 +39,18 @@ type BaseUser struct {
 	Patronymic string `json:"patronymic,omitempty"`
 }
 
+func (bu *BaseUser) Validate() bool{
+	if bu.Name=="" || bu.Surname == ""{
+		return false
+	}
+	return true
+}
+
+func (u *BaseUser) String() string {
+	return fmt.Sprintf("{ name:%s, surname:%s, patronymic:%s }",
+		u.Name, u.Surname,u.Patronymic)
+}
+
 type CountryArray struct {
 	Country []Country `json:"country"`
 }

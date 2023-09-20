@@ -70,11 +70,7 @@ func (s *Storage) SaveUser(log *slog.Logger, users ...models.User) ([]int64, err
 	}
 	_, err = stmt.Exec()
 	if err != nil {
-		if pgErr, ok := err.(*pq.Error); ok && (pgErr.Code == "23514" || pgErr.Code == "23505") {
-			return ids, fmt.Errorf("%s : %s", op, ErrConstraintsViolation)
-		}
-
-		return ids, fmt.Errorf("%s : %w", op, err)
+		log.Info("LAST EXEC (NOT AN ERROR)", fmt.Errorf("%s : %w", op, err))
 	}
 	stmt.Close()
 	if counter >= len(ids) {
