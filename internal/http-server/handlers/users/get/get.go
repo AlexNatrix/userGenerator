@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
-	"github.com/go-playground/validator"
 )
 
 type OP int
@@ -38,7 +37,7 @@ type UserSearchParams struct {
 }
 
 type UserGetter interface {
-	GetUsers(u UserSearchParams) ([]models.User, error)
+	GetUsers(userQuery map[string][]string) ([]models.User, error)
 }
 
 func ParseQuery() (UserSearchParams, error) {
@@ -76,23 +75,22 @@ func New(log *slog.Logger, userGetter UserGetter) http.HandlerFunc {
 		// 	return
 		// }
 
-		log.Info("request body decoded", slog.Any("request", req))
+		// log.Info("request body decoded", slog.Any("request", req))
 
-		if err := validator.New().Struct(req); err != nil {
-			validateErr := err.(validator.ValidationErrors)
+		// if err := validator.New().Struct(req); err != nil {
+		// 	validateErr := err.(validator.ValidationErrors)
 
-			log.Error("invalid request", internal.Err(err))
+		// 	log.Error("invalid request", internal.Err(err))
 
-			render.JSON(w, r, resp.ValidationError(validateErr))
+		// 	render.JSON(w, r, resp.ValidationError(validateErr))
 
-			return
-		}
-		u, err := ParseQuery()
-		id, err := userGetter.GetUsers(u)
+		// 	return
+		// }
+		id, err := userGetter.GetUsers(r.URL.Query())
 		if err != nil {
 			log.Error("failed to delete user", internal.Err(err))
 
-			render.JSON(w, r, resp.Error("failed to delete user"))
+			render.JSON(w, r, fmt.Errorf("failed to delete user"))
 
 			return
 		}

@@ -16,50 +16,49 @@ import (
 
 func newKafkaWriter(cfg internal.Config) *kafka.Writer {
 	return &kafka.Writer{
-		Addr:     kafka.TCP("localhost:9094"),
-		Topic:    cfg.KafkaProducerTopic,
+		Addr:                   kafka.TCP("localhost:9093"),
+		Topic:                  cfg.KafkaProducerTopic,
 		AllowAutoTopicCreation: true,
-		Balancer: &kafka.LeastBytes{},
+		Balancer:               &kafka.LeastBytes{},
 	}
 }
 
-func Produce(ct *context.Context,cfg internal.Config,logger *slog.Logger,messages chan kafka.Message) {
-	op:="kafka.producerFIOfailed"
+func Produce(ct *context.Context, cfg internal.Config, logger *slog.Logger, messages chan kafka.Message) {
+	op := "kafka.producerFIOfailed"
 
 	signals := make(chan os.Signal, 1)
 
 	signal.Notify(signals, syscall.SIGINT, syscall.SIGKILL)
 
 	ctx, cancel := context.WithCancel(*ct)
-	
+
 	// go routine for getting signals asynchronously
 	go func() {
 		sig := <-signals
-		logger.Info(fmt.Sprintf("%s: Got signal: %s", op,sig))
+		logger.Info(fmt.Sprintf("%s: Got signal: %s", op, sig))
 		cancel()
 	}()
 
+	delayMs, _ := strconv.Atoi(cfg.KafkaCFG.KafkaDelayMS)
 
-	delayMs, _ := strconv.Atoi(cfg.KafkaCFG.KafkaDelayMS)	
+	w := newKafkaWriter(cfg)
 
-	w := newKafkaWriter(cfg) 
-
-	logger.Info(fmt.Sprintf("%s Producer configuration: %v", op,w.Stats()))
+	logger.Info(fmt.Sprintf("%s Producer configuration: %v", op, w.Stats()))
 
 	i := 1
 
 	defer func() {
 		err := w.Close()
 		if err != nil {
-			logger.Error(fmt.Sprintf("%s:Error closing producer: %s", op,err))
+			logger.Error(fmt.Sprintf("%s:Error closing producer: %s", op, err))
 			return
 		}
-		logger.Info(fmt.Sprintf("%s:Producer closed",op))
+		logger.Info(fmt.Sprintf("%s:Producer closed", op))
 	}()
 
 	for {
-		temp:=<-messages
-		m:= kafka.Message{
+		temp := <-messages
+		m := kafka.Message{
 			Key:   temp.Key,
 			Value: temp.Value,
 		}
@@ -71,11 +70,10 @@ func Produce(ct *context.Context,cfg internal.Config,logger *slog.Logger,message
 			logger.Error(fmt.Sprintf("%s: Context canceled: %s", op, err))
 			break
 		} else {
-			logger.Error(fmt.Sprintf("%s: Error sending message: %s", op,err))
+			logger.Error(fmt.Sprintf("%s: Error sending message: %s", op, err))
 		}
 		i++
 
 		time.Sleep(time.Duration(delayMs) * time.Millisecond)
 	}
 }
-

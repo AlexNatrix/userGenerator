@@ -1,5 +1,5 @@
 env: "local"
-storage_path: "user=postgres password=postgres dbname=postgres sslmode=disable"
+storage_path: "user=admin password=secret dbname=postgres sslmode=disable port=5010"
 kafka_path: ":9093"
 http_server:
   address: "localhost:8082"

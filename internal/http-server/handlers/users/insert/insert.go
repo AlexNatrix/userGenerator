@@ -1,4 +1,4 @@
-package saveuser
+package saveusers
 
 import (
 	"errors"
@@ -14,17 +14,13 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
-
-
 type SaveRequest struct {
-	*models.User
+	data []models.User
 }
 
 type UserSaver interface {
-	SaveUser(user models.User) (int64, error)
+	SaveUser(users ...models.User) ([]int64, error)
 }
-
-
 
 func New(log *slog.Logger, urlSaver UserSaver) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -37,7 +33,7 @@ func New(log *slog.Logger, urlSaver UserSaver) http.HandlerFunc {
 
 		var req SaveRequest
 
-		err := render.DecodeJSON(r.Body, &req)
+		err := render.DecodeJSON(r.Body, &req.data)
 		if errors.Is(err, io.EOF) {
 			// Такую ошибку встретим, если получили запрос с пустым телом.
 			// Обработаем её отдельно
@@ -55,7 +51,7 @@ func New(log *slog.Logger, urlSaver UserSaver) http.HandlerFunc {
 			return
 		}
 
-		log.Info("request body decoded", slog.Any("request", req))
+		log.Info("request body decoded", slog.Any("request", req.data[0]))
 
 		if err := validator.New().Struct(req); err != nil {
 			validateErr := err.(validator.ValidationErrors)
@@ -67,20 +63,17 @@ func New(log *slog.Logger, urlSaver UserSaver) http.HandlerFunc {
 			return
 		}
 
-
-		id, err := urlSaver.SaveUser(req)
+		id, err := urlSaver.SaveUser(req.data...)
 		if err != nil {
-			log.Error("failed to add url", internal.Err(err))
+			log.Error("failed to add users", internal.Err(err))
 
-			render.JSON(w, r, resp.Error("failed to add url"))
+			render.JSON(w, r, resp.Error("failed to add users"))
 
 			return
 		}
 
-		log.Info("user added", slog.Int64("id", id))
+		log.Info("user added", slog.Int64("id", id[0]))
 
 		render.JSON(w, r, id)
 	}
 }
-
-

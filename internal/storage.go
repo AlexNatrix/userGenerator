@@ -4,9 +4,9 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
-	"log/slog"
 	models "main/internal/lib/api/model/user"
 	"strings"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/lib/pq"
@@ -15,7 +15,16 @@ import (
 const ErrConstraintsViolation = "Not enought fields provided"
 
 type Storage struct {
-	db *sql.DB
+	db          *sql.DB
+	insertStats []stats
+}
+
+type stats struct {
+	date      time.Time
+	batchSize int
+	failcount int
+	inserted  int
+	errors    []error
 }
 
 func New(StoragePath string) (*Storage, error) {
@@ -42,39 +51,55 @@ func New(StoragePath string) (*Storage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	return &Storage{db: db}, nil
+	sts := make([]stats, 0)
+	return &Storage{db: db, insertStats: sts}, nil
 }
 
-func (s *Storage) SaveUser(log *slog.Logger, users ...models.User) ([]int64, error) {
+func (s *Storage) SaveUser(users ...models.User) ([]int64, error) {
 	const op = "storage.SaveUser"
+	if len(users) == 0 {
+		return nil, nil
+	}
 	stmt, err := s.db.Prepare(`INSERT INTO users(name, surname, patronymic, age, sex, nationality)
 	VALUES($1, $2, $3, $4, $5, $6) RETURNING id`)
 	if err != nil {
 		return nil, fmt.Errorf("%s : %w", op, err)
 	}
+
 	ids := make([]int64, len(users))
-	counter := 0
+	batchSize := len(users)
+	failcount := 0
+	errors := make([]error, 0)
 	for i, user := range users {
 		err = stmt.QueryRow(
 			user.Name, user.Surname,
 			user.Patronymic, user.Age,
 			user.Sex, user.Nationality).Scan(&ids[i])
 		if err != nil {
-			counter++
+			failcount++
 			if pgErr, ok := err.(*pq.Error); ok && (pgErr.Code == "23514" || pgErr.Code == "23505") {
-				log.Error("Failed to proceed in DB,failed constraits", fmt.Errorf("%s : %s", op, ErrConstraintsViolation))
+				errors = append(errors, fmt.Errorf("%s : %s", op, ErrConstraintsViolation))
 			}
-
-			log.Error("Failed to proceed in DB,failed constraits", fmt.Errorf("%s : %w", op, err))
+			errors = append(errors, fmt.Errorf("%s : %s", op, ErrConstraintsViolation))
 		}
 	}
 	_, err = stmt.Exec()
 	if err != nil {
-		log.Info("LAST EXEC (NOT AN ERROR)", fmt.Errorf("%s : %w", op, err))
+		errors = append(errors, fmt.Errorf("%s LAST EXEC (NOT AN ERROR) for stats: %w", op, err))
 	}
 	stmt.Close()
-	if counter >= len(ids) {
-		return nil, fmt.Errorf("%s : %w", op, fmt.Errorf("Whole batch failed"))
+	if failcount >= len(ids) {
+		return nil, fmt.Errorf("%s : %w", op, fmt.Errorf("whole batch failed or empty"))
+	}
+	if len(s.insertStats) > 20 {
+		s.insertStats = s.insertStats[1:]
+		s.insertStats = append(s.insertStats, stats{
+			date:      time.Now().UTC().In(time.Local),
+			batchSize: batchSize,
+			failcount: failcount,
+			inserted:  batchSize - failcount,
+			errors:    errors,
+		})
 	}
 	return ids, nil
 }

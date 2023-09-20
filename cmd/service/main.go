@@ -3,15 +3,19 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"main/internal"
 	config "main/internal"
 	logger "main/internal"
 	storage "main/internal"
+	getusers "main/internal/http-server/handlers/users/get"
+	saveusers "main/internal/http-server/handlers/users/insert"
 	"main/internal/kafka/pipeline"
 	kafka_test "main/internal/kafka/tests"
 	models "main/internal/lib/api/model/user"
 	mwLogger "main/internal/middleware/logger"
 	"math/rand"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -38,8 +42,6 @@ func FakeUserGenerator(n int) []models.User {
 	return ret
 }
 
-
-
 func main() {
 	//config :cleanENV
 	cfg, err := config.LoadConfig()
@@ -49,7 +51,7 @@ func main() {
 	store, err := storage.New(cfg.StoragePath)
 	if err != nil {
 		log.Error("failed to init storage", internal.Err(err))
-		os.Exit(1);
+		os.Exit(1)
 	} else {
 		log.Info("DB init success")
 	}
@@ -85,47 +87,52 @@ func main() {
 	// 	}
 	// }
 	// fmt.Println(store.GetUsers(k.Query()))
-	kafka_test.Populate(100, log, cfg)
-	ctx:=context.Background()
-	p:=pipeline.New(&ctx,log,cfg,store)
-	signals := make(chan os.Signal, 1)
+	pipe := false
+	if pipe {
+		kafka_test.Populate(100, log, cfg)
+		ctx := context.Background()
+		p := pipeline.New(&ctx, log, cfg, store)
+		signals := make(chan os.Signal, 1)
 
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGKILL)
-	signal.Notify(signals, syscall.SIGINT, syscall.SIGKILL)
+		signal.Notify(signals, syscall.SIGINT, syscall.SIGKILL)
+		signal.Notify(signals, syscall.SIGINT, syscall.SIGKILL)
 
-	// go routine for getting signals asynchronously
-	go func() {
-		sig := <-signals
-		log.Info("%s Got signal: %w", "main",sig)
-		os.Exit(1)
-	}()
-	var wg sync.WaitGroup
-	wg.Add(1)
-	go func(){
-		defer wg.Done()
-		p.Start()
-	}()
-	wg.Wait()
-	
+		// go routine for getting signals asynchronously
+		go func() {
+			sig := <-signals
+			log.Info("%s Got signal: %w", "main", sig)
+			os.Exit(1)
+		}()
+		var wg sync.WaitGroup
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			p.Start()
+		}()
+		wg.Wait()
+	} else {
+		router.Post("/users", saveusers.New(log, store))
+		router.Get("/users", getusers.New(log, store))
+		log.Info("Starting server...", slog.String("address", cfg.Address))
+
+		srv := &http.Server{
+			Addr:         cfg.Address,
+			Handler:      router,
+			ReadTimeout:  cfg.Timeout,
+			WriteTimeout: cfg.Timeout,
+			IdleTimeout:  cfg.IdleTimeout,
+		}
+		srv.ListenAndServe()
+		// go func() {
+		// 	if err := srv.ListenAndServe(); err != nil {
+		// 		log.Error("failed to start server")
+		// 	}
+		// }()
+	}
+
 	// router.Post("/users/",saveuser.New(log,store))
 	// router.Delete("/users/{id}",deleteuser.New(log,store))
 	// router.Patch("/users/{id}",updateuser.New(log,store))
-
-	// log.Info("Starting server...",slog.String("address",cfg.Address))
-
-	// srv := &http.Server{
-	// 	Addr:  cfg.Address,
-	// 	Handler: router,
-	// 	ReadTimeout: cfg.Timeout,
-	// 	WriteTimeout: cfg.Timeout,
-	// 	IdleTimeout: cfg.IdleTimeout,
-	// }
-
-	// go func() {
-	// 	if err := srv.ListenAndServe(); err != nil {
-	// 		log.Error("failed to start server")
-	// 	}
-	// }()
 
 	// id ,err := store.DeleteUser(2)
 	// if err!=nil{
