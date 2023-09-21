@@ -4,30 +4,31 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"main/internal"
-	resp "main/internal/lib/api/response"
 	"net/http"
+	"usergenerator/internal"
+	resp "usergenerator/internal/lib/api/response"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 )
 
-
+//go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=UserDeleter
+type UserDeleter interface {
+	DeleteUser(userID int64) (int64, error)
+}
 
 type DeleteRequest struct {
 	Id int64 `json:"id"`
 }
 
-type UserDeleter interface {
-	DeleteUser(userID int64) (int64, error)
-}
-
-
-
+/**
+Delete user by ID in DB,
+DELETE request must contain body, with Id:{id} in JSON format 
+**/
 func New(log *slog.Logger, userDeleter UserDeleter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const op = "handlers.users.update.New"
+		const op = "handlers.users.delete.New"
 
 		log = log.With(
 			slog.String("op", op),
@@ -76,7 +77,7 @@ func New(log *slog.Logger, userDeleter UserDeleter) http.HandlerFunc {
 			return
 		}
 
-		log.Info("user updated")
+		log.Info("users updated")
 
 		render.JSON(w, r, id)
 	}
