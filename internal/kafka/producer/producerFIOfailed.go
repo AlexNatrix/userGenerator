@@ -57,9 +57,6 @@ func Produce(ct *context.Context, cfg internal.Config, logger *slog.Logger, mess
 	}()
 
 	for {
-		for i:=0;i<10;i++{
-			<-messages
-		}
 		temp := <-messages
 		m := kafka.Message{
 			Key:   temp.Key,

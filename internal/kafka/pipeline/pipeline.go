@@ -105,7 +105,6 @@ func (p *PipelineFIO) Start() {
 				}()
 			}
 			if len(batch) > 10 {
-				//fmt.Println(batch)
 				data, err := p.DB.InsertUsers(batch...)
 				if err != nil {
 					p.logger.Error(fmt.Sprintf("%s: failed to batch.Check logs for more info %s", op, err))
@@ -113,7 +112,8 @@ func (p *PipelineFIO) Start() {
 					p.logger.Info(fmt.Sprintf("%s: batch complete %v", op, data))
 					batch = make([]models.User, 0)
 				}
-			}
+			}	
+			
 		case <-quit:
 			close(p.In)
 			close(p.Out)

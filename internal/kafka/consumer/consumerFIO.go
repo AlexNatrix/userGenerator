@@ -18,7 +18,7 @@ func getKafkaReader(cfg internal.Config) *kafka.Reader {
 	brokers := strings.Split(cfg.KafkaURL, ",")
 	return kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  brokers,
-		GroupID:  "15",
+		GroupID:  "16",
 		Topic:    cfg.KafkaConsumerTopic,
 		MinBytes: 10e3, // 10KB
 		MaxBytes: 10e6, // 10MB

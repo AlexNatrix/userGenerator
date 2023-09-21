@@ -15,15 +15,6 @@ import (
 
 
 
-	
-var (
-	s=[]string{
-		"https://api.genderize.io",
-		"https://api.agify.io",
-		"https://api.nationalize.io",
-	}
-	user = models.BaseUser{Name: "Vasiliy",Surname: "Ushakov"}
-)
 
 
 func GetUrls(s []string) ([]url.URL,error){
@@ -41,15 +32,6 @@ func GetUrls(s []string) ([]url.URL,error){
 
 
 
-// func Test()(*models.User,error){
-// 	const op = "storage.Enrichment.test"
-// 	urls,err:=GetUrls(s)
-// 	if err!=nil{
-// 		return nil, fmt.Errorf("%s : %w",op,err)
-// 	}
-// 	return Enrichment(user,urls)
-// }
-
 func Enrichment(BaseUser models.BaseUser,s []string, log *slog.Logger) (*models.User,error){
 	fromURLs,err:=GetUrls(s)
 	if err!=nil{
@@ -57,7 +39,6 @@ func Enrichment(BaseUser models.BaseUser,s []string, log *slog.Logger) (*models.
 	}
 	const op = "storage.Enrichment"
 	retval:= make([]models.Enrichment,0)
-	retries:=0
 	for _,v := range fromURLs{
 		var data models.Enrichment
 		q:=v.Query()
@@ -81,31 +62,8 @@ func Enrichment(BaseUser models.BaseUser,s []string, log *slog.Logger) (*models.
 			if err!=nil{
 				return nil, fmt.Errorf("%s : %w",op,err)
 			}
-			if len(countryArray.Country)<1 && retries<3{
-				for retries<3{
-					retries++
-					resp,err=client.Get(v.String())
-					if err!=nil{
-						return nil, fmt.Errorf("%s : %w",op,err)
-					}
-					body, err :=io.ReadAll(resp.Body)
-					if err!=nil{
-						return nil, fmt.Errorf("%s : %w",op,err)
-					}
-					var countryArray models.CountryArray
-					err=json.Unmarshal(body,&countryArray)
-					if err!=nil{
-						return nil, fmt.Errorf("%s : %w",op,err)
-					}
-					log.Info(fmt.Sprintf("%s:fetched from URL:%v [%d]bytes" ,op,v.String(),len(body)))
-					if len(countryArray.Country)>1{
-						break
-					}
-					time.Sleep(time.Duration(retries)*time.Millisecond)
-				}
-				if len(countryArray.Country)<1{
-						return nil, fmt.Errorf("%s : Bad nationality data (len<1) %v %s",op,countryArray,BaseUser)
-					}
+			if len(countryArray.Country)<1{
+				return nil, fmt.Errorf("%s : Bad nationality data from API (len<1) %v %s",op,countryArray,BaseUser)
 			}else{
 				data.Nationality=countryArray.Country[0].CountryID
 			}
@@ -149,6 +107,6 @@ func Merge(data []models.Enrichment) (*models.Enrichment,error){
 	if counter>=3{
 		return &mergedData,nil
 	}
-	fmt.Println(mergedData)
-		return nil, fmt.Errorf("%s : %s",op,"Enrichment data error")
+	return nil, fmt.Errorf("%s : %s",op,"Enrichment data error")
 }
+
