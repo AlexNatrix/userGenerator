@@ -4,19 +4,19 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"main/internal"
 	"os"
 	"os/signal"
 	"strconv"
 	"syscall"
 	"time"
+	"usergenerator/internal"
 
 	"github.com/segmentio/kafka-go"
 )
 
 func newKafkaWriter(cfg internal.Config) *kafka.Writer {
 	return &kafka.Writer{
-		Addr:                   kafka.TCP("localhost:9093"),
+		Addr:                   kafka.TCP(cfg.KafkaURL),
 		Topic:                  cfg.KafkaProducerTopic,
 		AllowAutoTopicCreation: true,
 		Balancer:               &kafka.LeastBytes{},
@@ -43,9 +43,9 @@ func Produce(ct *context.Context, cfg internal.Config, logger *slog.Logger, mess
 
 	w := newKafkaWriter(cfg)
 
-	logger.Info(fmt.Sprintf("%s Producer configuration: %v", op, w.Stats()))
+	logger.Info(fmt.Sprintf("%s Producer configuration: %v , %v", op, w.Addr,w.Topic))
 
-	i := 1
+	//i := 1
 
 	defer func() {
 		err := w.Close()
@@ -57,6 +57,9 @@ func Produce(ct *context.Context, cfg internal.Config, logger *slog.Logger, mess
 	}()
 
 	for {
+		for i:=0;i<10;i++{
+			<-messages
+		}
 		temp := <-messages
 		m := kafka.Message{
 			Key:   temp.Key,
@@ -72,7 +75,7 @@ func Produce(ct *context.Context, cfg internal.Config, logger *slog.Logger, mess
 		} else {
 			logger.Error(fmt.Sprintf("%s: Error sending message: %s", op, err))
 		}
-		i++
+		//i++
 
 		time.Sleep(time.Duration(delayMs) * time.Millisecond)
 	}

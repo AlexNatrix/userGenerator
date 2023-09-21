@@ -2,31 +2,34 @@ package updateuser
 
 import (
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
-	"main/internal"
-	models "main/internal/lib/api/model/user"
-	resp "main/internal/lib/api/response"
 	"net/http"
+	"usergenerator/internal"
+	models "usergenerator/internal/lib/api/model/user"
+	resp "usergenerator/internal/lib/api/response"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 )
 
-
-
-type UpdateRequest struct {
-	Id int64 `json:"id"`
-	data *models.User
-}
-
+//go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=UserUpdater
 type UserUpdater interface {
 	UpdateUser(userID int64, user models.User) error
 }
 
+type UpdateRequest struct {
+	Id int64 `json:"id"`
+	Data models.User `json:"data"`
+}
 
 
+/**
+Update user by ID in DB.
+PATCH request must contain body, with ID:{id} and data:{user} in JSON format 
+**/
 func New(log *slog.Logger, userUpdater UserUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.users.update.New"
@@ -36,8 +39,10 @@ func New(log *slog.Logger, userUpdater UserUpdater) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
-		var req UpdateRequest
-
+		req :=UpdateRequest{
+			Id:-1,
+			Data:models.NewUser(),
+		}
 		err := render.DecodeJSON(r.Body, &req)
 		if errors.Is(err, io.EOF) {
 			// Такую ошибку встретим, если получили запрос с пустым телом.
@@ -48,14 +53,14 @@ func New(log *slog.Logger, userUpdater UserUpdater) http.HandlerFunc {
 
 			return
 		}
-		if err != nil {
+		if err != nil && !req.Data.Validate() && req.Id==-1 {
 			log.Error("failed to decode request body", internal.Err(err))
 
 			render.JSON(w, r, resp.Error("failed to decode request"))
 
 			return
 		}
-
+		fmt.Println(req)
 		log.Info("request body decoded", slog.Any("request", req))
 
 		if err := validator.New().Struct(req); err != nil {
@@ -69,7 +74,7 @@ func New(log *slog.Logger, userUpdater UserUpdater) http.HandlerFunc {
 		}
 
 
-		err = userUpdater.UpdateUser(req.Id ,req.data)
+		err = userUpdater.UpdateUser(req.Id ,req.Data)
 		if err != nil {
 			log.Error("failed to update user", internal.Err(err))
 
@@ -80,7 +85,7 @@ func New(log *slog.Logger, userUpdater UserUpdater) http.HandlerFunc {
 
 		log.Info("user updated")
 
-		render.JSON(w, r, true)
+		render.JSON(w, r, fmt.Sprintf("updated user with id:%d",req.Id))
 	}
 }
 

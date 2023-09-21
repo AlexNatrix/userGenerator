@@ -7,7 +7,7 @@ type User struct {
 	*Enrichment
 }
 
-func New() User {
+func NewUser() User {
 	return User{
 		&BaseUser{
 			Name:       "",

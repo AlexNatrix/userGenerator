@@ -5,16 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"main/internal"
-	storage "main/internal"
-	"main/internal/kafka/consumer"
-	"main/internal/kafka/enrichment"
-	"main/internal/kafka/producer"
-	models "main/internal/lib/api/model/user"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+	"usergenerator/internal"
+	"usergenerator/internal/kafka/enrichment"
+	models "usergenerator/internal/lib/api/model/user"
+	storage "usergenerator/storage"
 
 	"github.com/segmentio/kafka-go"
 )
@@ -24,27 +22,35 @@ type PipelineFIO struct {
 	Out     chan models.BaseUser
 	Failed  chan kafka.Message
 	DBqueue chan models.User
-	DB      *internal.Storage
+	DB      *storage.Storage
 	CFG     internal.Config
 	Ctx     *context.Context
 	logger  *slog.Logger
+	stats stats
+}
+
+type stats struct{
+	in int
+	out int
+	fail int
+	miss int
 }
 
 func New(ctx *context.Context, logger *slog.Logger, cfg internal.Config, db *storage.Storage) *PipelineFIO {
 	return &PipelineFIO{
-		In:     make(chan kafka.Message, 10),
-		Out:    make(chan models.BaseUser, 10),
-		Failed: make(chan kafka.Message, 10),
+		In:     make(chan kafka.Message,10),
+		Out:    make(chan models.BaseUser,10),
+		Failed: make(chan kafka.Message,10),
 		DB:     db,
 		CFG:    cfg,
 		Ctx:    ctx,
 		logger: logger,
+		stats: stats{0,0,0,0},
 	}
 }
 
 func (p *PipelineFIO) Start() {
-	go consumer.Consumer(p.Ctx, p.CFG, p.logger, p.In)
-	go producer.Produce(p.Ctx, p.CFG, p.logger, p.Failed)
+
 
 	op := "kafka.Pipeline"
 	var quit chan struct{}
@@ -56,7 +62,7 @@ func (p *PipelineFIO) Start() {
 	// go routine for getting signals asynchronously
 	go func() {
 		sig := <-signals
-		p.logger.Info("%s Got signal: %w", op, sig)
+		p.logger.Info(fmt.Sprintf("%s Got signal: %v", op, sig))
 		quit <- struct{}{}
 		cancel()
 	}()
@@ -67,17 +73,19 @@ func (p *PipelineFIO) Start() {
 	for {
 		select {
 		case <-p.In:
+			p.stats.in++
 			msg = <-p.In
 			err := json.Unmarshal(msg.Value, &user)
 			if err != nil || !user.Validate() {
-				p.Failed <- msg
 				if err != nil {
 					p.logger.Info(fmt.Sprintf("%s :%s", op, err))
 				} else {
-					p.logger.Info(fmt.Sprintf("%s :%s", op, "VALIDATION ERROR"))
+					p.logger.Info(fmt.Sprintf("%s :%s [%v]", op, "validation",user))
 				}
-
+				p.stats.fail++
+				p.Failed <- msg
 			} else {
+				p.stats.out++
 				p.Out <- user
 				p.logger.Info(fmt.Sprintf("%s: proceed messsage %s", op, user))
 			}
@@ -87,22 +95,22 @@ func (p *PipelineFIO) Start() {
 				go func() {
 					u, err := enrichment.Enrichment(<-p.Out, p.CFG.EnrichmentURLS, p.logger)
 					if err != nil {
+						p.stats.miss++
 						p.logger.Info(fmt.Sprintf("%s: enrichment error %s", op, err))
-
 					} else {
-						p.logger.Info(fmt.Sprintf("%s: batch++ %s %d", op, user, len(batch)))
 						batch = append(batch, *u)
+						p.logger.Info(fmt.Sprintf("%s: add to batch: %s size:%d", op, user, len(batch)))
 					}
 					<-pool
 				}()
 			}
 			if len(batch) > 10 {
 				//fmt.Println(batch)
-				data, err := p.DB.SaveUser(batch...)
+				data, err := p.DB.InsertUsers(batch...)
 				if err != nil {
-					p.logger.Error(fmt.Sprintf("%s:failed to batch.Check logs for more info %s", op, err))
+					p.logger.Error(fmt.Sprintf("%s: failed to batch.Check logs for more info %s", op, err))
 				} else {
-					p.logger.Info(fmt.Sprintf("%s batch complete %v", op, data))
+					p.logger.Info(fmt.Sprintf("%s: batch complete %v", op, data))
 					batch = make([]models.User, 0)
 				}
 			}
@@ -113,23 +121,8 @@ func (p *PipelineFIO) Start() {
 			p.logger.Warn(fmt.Sprintf("%s :quit", op))
 			break
 		default:
-			p.logger.Info(fmt.Sprintf("%s:Pulse", op))
+			p.logger.Info(fmt.Sprintf("%s:Pulse, stats in:%d, fail:%d,out:%d,miss:%d", op,p.stats.in,p.stats.fail,p.stats.out,p.stats.miss))
 			time.Sleep(5 * time.Second)
 		}
 	}
 }
-
-// var wg sync.WaitGroup
-
-//     for i := 1; i <= 5; i++ {
-//         wg.Add(1)
-
-//         i := i
-
-//         go func() {
-//             defer wg.Done()
-//             worker(i)
-//         }()
-//     }
-
-//     wg.Wait()

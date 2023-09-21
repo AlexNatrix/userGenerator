@@ -3,48 +3,32 @@ package getusers
 import (
 	"fmt"
 	"log/slog"
-	"main/internal"
-	models "main/internal/lib/api/model/user"
 	"net/http"
+	"usergenerator/internal"
+	"usergenerator/internal/cache"
+	models "usergenerator/internal/lib/api/model/user"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
+	redisCache "github.com/go-redis/cache/v9"
 )
 
-type OP int
-
-const (
-	EQ = iota
-	NEQ
-	MOR
-	LES
-)
-
-type Param[T comparable] struct {
-	Val T
-	op  OP
-}
-
-type UserSearchParams struct {
-	ID         Param[int]
-	Name       Param[string]
-	Surname    Param[string]
-	Patronymic Param[string]
-	Age        Param[int]
-	Sex        Param[string]
-	Page       int
-	PerPage    int
-}
-
+//go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=UserGetter
 type UserGetter interface {
 	GetUsers(userQuery map[string][]string) ([]models.User, error)
 }
 
-func ParseQuery() (UserSearchParams, error) {
-	return UserSearchParams{}, nil
-}
-
-func New(log *slog.Logger, userGetter UserGetter) http.HandlerFunc {
+/**
+Fetch users from DB, 
+Query must be in format users/?{param}={op}~{value}...&page={n}&per_page={m},
+where op one of operators:
+lt="less than",gt="greater than",eq="equal",neq="not equal",
+iff operator doesnt exists, than by default eq operator will be used.
+Example:users/?name=vitalya&age=lt~50&surname=gt~b
+if page missed, than page will be equal to 1.
+if per_page is missed, per_page will be equal to 100.
+**/
+func New(log *slog.Logger, userGetter UserGetter,c *cache.Cache) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.users.getter.New"
 
@@ -52,51 +36,32 @@ func New(log *slog.Logger, userGetter UserGetter) http.HandlerFunc {
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
-
-		a := r.URL.Query()
-		for k, v := range a {
-			fmt.Println(k, v)
-		}
-		//err := render.DecodeJSON(r.Body, &req)
-		// if errors.Is(err, io.EOF) {
-		// 	// Такую ошибку встретим, если получили запрос с пустым телом.
-		// 	// Обработаем её отдельно
-		// 	log.Error("request body is empty")
-
-		// 	render.JSON(w, r, resp.Error("empty request"))
-
-		// 	return
-		// }
-		// if err != nil {
-		// 	log.Error("failed to decode request body", internal.Err(err))
-
-		// 	render.JSON(w, r, resp.Error("failed to decode request"))
-
-		// 	return
-		// }
-
-		// log.Info("request body decoded", slog.Any("request", req))
-
-		// if err := validator.New().Struct(req); err != nil {
-		// 	validateErr := err.(validator.ValidationErrors)
-
-		// 	log.Error("invalid request", internal.Err(err))
-
-		// 	render.JSON(w, r, resp.ValidationError(validateErr))
-
-		// 	return
-		// }
 		id, err := userGetter.GetUsers(r.URL.Query())
 		if err != nil {
-			log.Error("failed to delete user", internal.Err(err))
+			log.Error("failed to fetch users", internal.Err(err))
 
-			render.JSON(w, r, fmt.Errorf("failed to delete user"))
+			render.JSON(w, r, fmt.Errorf("failed to fetch user"))
 
 			return
 		}
-
-		log.Info("user updated")
+		if c!=nil{
+			key:=r.URL.String()
+			item:=&redisCache.Item{
+				Ctx:   c.CTX,
+				Key:   key,
+				Value: id,
+				TTL:   c.TTL,
+			}
+			err = c.Exmpl.Set(item)
+			if err != nil {
+				log.Error("redis failed caching ", internal.Err(err))
+			}
+		}
+		log.Info("fetched users")
 
 		render.JSON(w, r, id)
 	}
 }
+
+
+

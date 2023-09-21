@@ -14,6 +14,7 @@ type Config struct {
 	StoragePath string `yaml:"storage_path" env-required:"true"`
 	HTTPServer  `yaml:"http_server"`
 	KafkaCFG `yaml:"kafka_cfg" env-required:"true"`
+	RedisCFG  `yaml:"redis_cfg" env-required:"true"`
 	EnrichmentURLS []string `yaml:"enrichment_URLs" env-required:"true"`
 	EnrichmentTimeoutMS string `yaml:"enrichment_timeout_ms" env-default:"1"`
 }
@@ -32,6 +33,10 @@ type KafkaCFG struct{
 	KafkaConsumerGroup  string  `yaml:"kafka_consumer_groupID" env-default:"0"`
 }
 
+type RedisCFG struct{
+	RedisURL string  `yaml:"redis_URL" env-default:"localhost:6379"`
+	TTL  time.Duration `yaml:"ttl" env-default:"1s"`
+}
 
 
 func LoadConfig() (Config,error){

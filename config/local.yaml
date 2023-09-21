@@ -1,5 +1,5 @@
 env: "local"
-storage_path: "user=admin password=secret dbname=postgres sslmode=disable port=5010"
+storage_path: "user=postgres password=postgres dbname=postgres sslmode=disable port=5010"
 kafka_path: ":9093"
 http_server:
   address: "localhost:8082"
@@ -17,3 +17,6 @@ enrichment_URLs: [
 	"https://api.nationalize.io"
 ]
 enrichment_timeout_ms: "1"
+redis_cfg:
+  redis_URL: "localhost:6379"
+  ttl: 60m

@@ -5,13 +5,30 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"main/internal"
-	models "main/internal/lib/api/model/user"
 	"math/rand"
+	"usergenerator/internal"
+	models "usergenerator/internal/lib/api/model/user"
 
 	"github.com/brianvoe/gofakeit"
 	"github.com/segmentio/kafka-go"
 )
+
+
+func FakeUserGenerator(n int) []models.User {
+	ret := make([]models.User, n)
+	for i := 0; i < n; i++ {
+		u := gofakeit.Person()
+		user := models.NewUser()
+		user.Name = u.FirstName
+		user.Surname = u.LastName
+		user.Patronymic = "Sanich"
+		user.Sex = u.Gender
+		user.Nationality = u.Address.Country
+		user.Age = rand.Intn(100)
+		ret[i] = user
+	}
+	return ret
+}
 
 func FakeBaseUserGenerator(n int) []models.BaseUser {
 	ret := make([]models.BaseUser, n)
@@ -44,7 +61,6 @@ func Populate(n int,logger *slog.Logger, cfg internal.Config) {
 	kafkaURL := cfg.KafkaCFG.KafkaURL
 	topic := cfg.KafkaCFG.KafkaConsumerTopic
 	writer := newKafkaWriter(kafkaURL, topic)
-	defer writer.Close()
 	logger.Info(fmt.Sprintf("%s start producing ... !!",op))
 	data:=FakeBaseUserGenerator(n)
 	for i := 0; i<n; i++ {
@@ -67,4 +83,5 @@ func Populate(n int,logger *slog.Logger, cfg internal.Config) {
 		}
 		//time.Sleep(1 * time.Millisecond)
 	}
+	writer.Close()
 }

@@ -1,42 +1,48 @@
-package saveusers
+package insertusers
 
 import (
 	"errors"
 	"io"
 	"log/slog"
-	"main/internal"
-	models "main/internal/lib/api/model/user"
-	resp "main/internal/lib/api/response"
 	"net/http"
+	"usergenerator/internal"
+	models "usergenerator/internal/lib/api/model/user"
+	resp "usergenerator/internal/lib/api/response"
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 )
 
-type SaveRequest struct {
+//go:generate go run github.com/vektra/mockery/v2@v2.28.2 --name=UserInserter
+
+type UserInserter interface {
+	InsertUsers(users ...models.User) ([]int64, error)
+}
+
+type InsertRequest struct {
 	data []models.User
 }
 
-type UserSaver interface {
-	SaveUser(users ...models.User) ([]int64, error)
-}
 
-func New(log *slog.Logger, urlSaver UserSaver) http.HandlerFunc {
+/**
+Insert users into DB in bulk.
+POST request must conatins body, with array of users in JSON format
+**/
+func New(log *slog.Logger, urlSaver UserInserter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const op = "handlers.users.save.New"
+		const op = "handlers.users.insert.New"
 
 		log = log.With(
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
-		var req SaveRequest
+		var req InsertRequest
 
 		err := render.DecodeJSON(r.Body, &req.data)
 		if errors.Is(err, io.EOF) {
-			// Такую ошибку встретим, если получили запрос с пустым телом.
-			// Обработаем её отдельно
+			
 			log.Error("request body is empty")
 
 			render.JSON(w, r, resp.Error("empty request"))
@@ -45,7 +51,7 @@ func New(log *slog.Logger, urlSaver UserSaver) http.HandlerFunc {
 		}
 		if err != nil {
 			log.Error("failed to decode request body", internal.Err(err))
-
+			w.WriteHeader(http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("failed to decode request"))
 
 			return
@@ -57,22 +63,22 @@ func New(log *slog.Logger, urlSaver UserSaver) http.HandlerFunc {
 			validateErr := err.(validator.ValidationErrors)
 
 			log.Error("invalid request", internal.Err(err))
-
+			w.WriteHeader(http.StatusBadRequest)
 			render.JSON(w, r, resp.ValidationError(validateErr))
 
 			return
 		}
 
-		id, err := urlSaver.SaveUser(req.data...)
+		id, err := urlSaver.InsertUsers(req.data...)
 		if err != nil {
-			log.Error("failed to add users", internal.Err(err))
-
-			render.JSON(w, r, resp.Error("failed to add users"))
+			log.Error("failed to insert users", internal.Err(err))
+			w.WriteHeader(http.StatusInternalServerError)
+			render.JSON(w, r, resp.Error("failed to insert users"))
 
 			return
 		}
 
-		log.Info("user added", slog.Int64("id", id[0]))
+		log.Info("user inserted. FirtsID:", slog.Int64("id", id[0]))
 
 		render.JSON(w, r, id)
 	}

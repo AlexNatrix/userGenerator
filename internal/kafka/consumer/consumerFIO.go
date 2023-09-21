@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"main/internal"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
+	"usergenerator/internal"
 
 	"github.com/segmentio/kafka-go"
 )
@@ -18,7 +18,7 @@ func getKafkaReader(cfg internal.Config) *kafka.Reader {
 	brokers := strings.Split(cfg.KafkaURL, ",")
 	return kafka.NewReader(kafka.ReaderConfig{
 		Brokers:  brokers,
-		GroupID:  "6",
+		GroupID:  "15",
 		Topic:    cfg.KafkaConsumerTopic,
 		MinBytes: 10e3, // 10KB
 		MaxBytes: 10e6, // 10MB
@@ -42,10 +42,6 @@ func Consumer(ct *context.Context,cfg internal.Config,logger *slog.Logger,ch cha
 		logger.Info(fmt.Sprintf("%s Got signal: %v", op,sig))
 		cancel()
 	}()
-
-
-
-
 
 	r := getKafkaReader(cfg)
 
